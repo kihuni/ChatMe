@@ -1,62 +1,48 @@
 from rest_framework import serializers
-from .models import User
-from django.contrib.auth import authenticate
-from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth.password_validation import validate_password
+from .models import CustomUser, Role
 
-class UserSerializer(serializers.ModelSerializer):
+class RoleSerializer(serializers.ModelSerializer):
     class Meta:
-        model = User
-        fields = (
-            'id', 'username', 'email', 
-            'first_name', 'last_name',
-            'avatar', 'bio', 
-            'is_online', 'last_seen'
-        )
-        read_only_fields = ('id', 'last_seen')
-        
-
-
-class UserLoginSerializer(serializers.Serializer):
-    username = serializers.CharField()
-    password = serializers.CharField(
-        style={'input_type': 'password'},
-        trim_whitespace=False
-    )
-
-    def validate(self, attrs):
-        username = attrs.get('username')
-        password = attrs.get('password')
-
-        if username and password:
-            # Authenticate user
-            user = authenticate(
-                request=self.context.get('request'),
-                username=username, 
-                password=password
-            )
-
-            # Check if authentication failed
-            if not user:
-                raise serializers.ValidationError(
-                    'Unable to log in with provided credentials.',
-                    code='authorization'
-                )
-        else:
-            raise serializers.ValidationError(
-                'Must include "username" and "password".',
-                code='authorization'
-            )
-
-        # Add user to validated data
-        attrs['user'] = user
-        return attrs
+        model = Role
+        fields = ['id', 'name', 'description']
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(
+        write_only=True,
+        required=True,
+        validators=[validate_password]
+    )
+    confirm_password = serializers.CharField(write_only=True, required=True)
+    role = serializers.PrimaryKeyRelatedField(
+        queryset=Role.objects.all(),
+        required=False
+    )
 
     class Meta:
-        model = User
-        fields = ('username', 'email', 'password')
+        model = CustomUser
+        fields = [
+            'email', 'username', 'full_name',
+            'password', 'confirm_password', 'role'
+        ]
+        extra_kwargs = {
+            'email': {'required': True},
+            'username': {'required': True}
+        }
+
+    def validate(self, data):
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError({"confirm_password": "Passwords must match."})
+        return data
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+        # Remove confirm_password before creating user
+        validated_data.pop('confirm_password')
+
+        # Set default role if not provided
+        if 'role' not in validated_data:
+            default_role = Role.objects.get_or_create(name='member')[0]
+            validated_data['role'] = default_role
+
+        user = CustomUser.objects.create_user(**validated_data)
+        return user

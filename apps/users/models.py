@@ -12,7 +12,7 @@ class Role(models.Model):
         ('guest', 'Limited Access User')
     )
 
-    name = models.CharField(max_length=50, choices=ROLE_CHOICES, unique=True)
+    name = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, unique=True)
     description = models.TextField(blank=True)
 
     def __str__(self):
@@ -37,16 +37,37 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     role = models.ForeignKey(
         Role, 
         on_delete=models.SET_DEFAULT, 
-        default=None, 
+        default='member', 
         null=True, 
         related_name='users'
     )
+    
+    def __str__(self):
+        return self.get_name_display() if isinstance(self.name, int) else self.name
+
 
     # Authentication Tracking
     last_login_attempt = models.DateTimeField(null=True, blank=True)
     login_attempts = models.IntegerField(default=0)
     is_locked = models.BooleanField(default=False)
     locked_until = models.DateTimeField(null=True, blank=True)
+    
+    def is_account_locked(self):
+        """
+        Returns True if the account is locked and the lock has not expired.
+        """
+        if self.is_locked and self.locked_until:
+            return timezone.now() < self.locked_until
+        return False
+    
+    def reset_login_attempts(self):
+        """
+        Resets the login attempts and unlocks the user.
+        """
+        self.login_attempts = 0
+        self.is_locked = False
+        self.locked_until = None
+        self.save()
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'full_name']
@@ -55,7 +76,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
-
+    
     def has_perm(self, perm, obj=None):
         # Custom permission logic
         if self.is_superuser or self.is_staff:

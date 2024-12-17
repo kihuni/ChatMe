@@ -1,11 +1,9 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, RoleViewSet
-
-router = DefaultRouter()
-router.register(r'users', UserViewSet, basename='user')
-router.register(r'roles', RoleViewSet, basename='role')
+from django.urls import path
+from users.views import UserRegistrationView, LoginView, MFAVerificationView
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path("register/", UserRegistrationView.as_view(), name="user-registration"),
+    path("login/", LoginView.as_view(), name="user-login"),
+    path("verify-mfa/", MFAVerificationView.as_view(), name="mfa-verification"),
+
 ]
